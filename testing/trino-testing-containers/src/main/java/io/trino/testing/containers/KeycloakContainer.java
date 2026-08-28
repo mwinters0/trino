@@ -11,16 +11,11 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-package io.trino.plugin.iceberg.containers;
+package io.trino.testing.containers;
 
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import com.google.common.collect.ImmutableSet;
-import io.trino.testing.containers.BaseTestContainer;
-import org.keycloak.admin.client.Keycloak;
-import org.keycloak.admin.client.KeycloakBuilder;
-import org.keycloak.admin.client.resource.RealmResource;
-import org.keycloak.representations.idm.RealmRepresentation;
 import org.testcontainers.containers.Network;
 
 import java.util.Map;
@@ -63,37 +58,9 @@ public class KeycloakContainer
         withRunCommand(ImmutableList.of("start-dev"));
     }
 
-    @Override
-    public void start()
-    {
-        super.start();
-    }
-
     public String getUrl()
     {
         return "http://" + getMappedHostAndPortForExposedPort(PORT);
-    }
-
-    public String getAccessToken()
-    {
-        String realm = "master";
-        String clientId = "admin-cli";
-
-        try (Keycloak keycloak = KeycloakBuilder.builder()
-                .serverUrl(getUrl())
-                .realm(realm)
-                .clientId(clientId)
-                .username(DEFAULT_USER_NAME)
-                .password(DEFAULT_PASSWORD)
-                .build()) {
-            RealmResource master = keycloak.realms().realm(realm);
-            RealmRepresentation masterRep = master.toRepresentation();
-            // change access token lifespan from 1 minute (default) to 1 hour
-            // to keep the token alive in case testcase takes more than a minute to finish execution.
-            masterRep.setAccessTokenLifespan(3600);
-            master.update(masterRep);
-            return keycloak.tokenManager().grantToken().getToken();
-        }
     }
 
     public static class Builder

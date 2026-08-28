@@ -16,12 +16,16 @@ package io.trino.plugin.iceberg.catalog.nessie;
 import com.google.common.collect.ImmutableList;
 import com.google.common.collect.ImmutableMap;
 import io.trino.plugin.iceberg.IcebergQueryRunner;
-import io.trino.plugin.iceberg.containers.KeycloakContainer;
 import io.trino.plugin.iceberg.containers.NessieContainer;
 import io.trino.testing.AbstractTestQueryFramework;
 import io.trino.testing.QueryRunner;
+import io.trino.testing.containers.KeycloakContainer;
 import io.trino.testing.sql.TestTable;
 import org.junit.jupiter.api.Test;
+import org.keycloak.admin.client.Keycloak;
+import org.keycloak.admin.client.KeycloakBuilder;
+import org.keycloak.admin.client.resource.RealmResource;
+import org.keycloak.representations.idm.RealmRepresentation;
 import org.testcontainers.containers.Network;
 
 import java.nio.file.Files;
@@ -65,7 +69,7 @@ public class TestIcebergNessieCatalogWithBearerAuth
                 .put("iceberg.nessie-catalog.uri", nessieContainer.getRestApiUri())
                 .put("iceberg.nessie-catalog.default-warehouse-dir", tempDir.toString())
                 .put("iceberg.nessie-catalog.authentication.type", "BEARER")
-                .put("iceberg.nessie-catalog.authentication.token", keycloakContainer.getAccessToken())
+                .put("iceberg.nessie-catalog.authentication.token", accessToken(keycloakContainer))
                 .buildOrThrow();
 
         return IcebergQueryRunner.builder()
@@ -73,6 +77,27 @@ public class TestIcebergNessieCatalogWithBearerAuth
                 .setIcebergProperties(properties)
                 .addIcebergProperty("fs.hadoop.enabled", "true")
                 .build();
+    }
+
+    private static String accessToken(KeycloakContainer keycloakContainer)
+    {
+        String realm = "master";
+
+        try (Keycloak keycloak = KeycloakBuilder.builder()
+                .serverUrl(keycloakContainer.getUrl())
+                .realm(realm)
+                .clientId("admin-cli")
+                .username(KeycloakContainer.DEFAULT_USER_NAME)
+                .password(KeycloakContainer.DEFAULT_PASSWORD)
+                .build()) {
+            RealmResource master = keycloak.realms().realm(realm);
+            RealmRepresentation masterRepresentation = master.toRepresentation();
+            // change access token lifespan from 1 minute (default) to 1 hour
+            // to keep the token alive in case testcase takes more than a minute to finish execution.
+            masterRepresentation.setAccessTokenLifespan(3600);
+            master.update(masterRepresentation);
+            return keycloak.tokenManager().grantToken().getToken();
+        }
     }
 
     @Test
